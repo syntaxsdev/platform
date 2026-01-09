@@ -5,19 +5,17 @@ import {
   Loader2,
   FolderTree,
   GitBranch,
-  Edit,
-  RefreshCw,
   Folder,
   Sparkles,
-  X,
   CloudUpload,
-  CloudDownload,
-  MoreVertical,
   Cloud,
   FolderSync,
   Download,
   SlidersHorizontal,
   ArrowLeft,
+  AlertTriangle,
+  X,
+  MoreVertical,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -48,14 +46,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Label } from "@/components/ui/label";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { SessionHeader } from "./session-header";
@@ -66,7 +57,6 @@ import { AddContextModal } from "./components/modals/add-context-modal";
 import { UploadFileModal } from "./components/modals/upload-file-modal";
 import { CustomWorkflowDialog } from "./components/modals/custom-workflow-dialog";
 import { ManageRemoteDialog } from "./components/modals/manage-remote-dialog";
-import { CommitChangesDialog } from "./components/modals/commit-changes-dialog";
 import { WorkflowsAccordion } from "./components/accordions/workflows-accordion";
 import { RepositoriesAccordion } from "./components/accordions/repositories-accordion";
 import { ArtifactsAccordion } from "./components/accordions/artifacts-accordion";
@@ -94,14 +84,13 @@ import {
 } from "@/services/queries";
 import {
   useWorkspaceList,
-  useGitMergeStatus,
-  useGitListBranches,
 } from "@/services/queries/use-workspace";
 import { successToast, errorToast } from "@/hooks/use-toast";
 import {
   useOOTBWorkflows,
   useWorkflowMetadata,
 } from "@/services/queries/use-workflows";
+import { useProjectIntegrationStatus } from "@/services/queries/use-projects";
 import { useMutation } from "@tanstack/react-query";
 
 // Constants for artifact auto-refresh timing
@@ -165,7 +154,6 @@ export default function ProjectSessionDetailPage({
     Record<string, DirectoryRemote>
   >({});
   const [remoteDialogOpen, setRemoteDialogOpen] = useState(false);
-  const [commitModalOpen, setCommitModalOpen] = useState(false);
   const [customWorkflowDialogOpen, setCustomWorkflowDialogOpen] =
     useState(false);
 
@@ -194,6 +182,10 @@ export default function ProjectSessionDetailPage({
   const stopMutation = useStopSession();
   const deleteMutation = useDeleteSession();
   const continueMutation = useContinueSession();
+  
+  // Check integration status
+  const { data: integrationStatus } = useProjectIntegrationStatus(projectName);
+  const githubConfigured = integrationStatus?.github ?? false;
 
   // Extract phase for sidebar state management
   const phase = session?.status?.phase || "Pending";
@@ -508,19 +500,8 @@ export default function ProjectSessionDetailPage({
 
   // Git operations for selected directory
   const currentRemote = directoryRemotes[selectedDirectory.path];
-  const { data: mergeStatus, refetch: refetchMergeStatus } = useGitMergeStatus(
-    projectName,
-    sessionName,
-    selectedDirectory.path,
-    currentRemote?.branch || "main",
-    !!currentRemote,
-  );
-  const { data: remoteBranches = [] } = useGitListBranches(
-    projectName,
-    sessionName,
-    selectedDirectory.path,
-    !!currentRemote,
-  );
+  
+  // Removed: mergeStatus and remoteBranches - agent handles all git operations now
 
   // Git operations hook
   const gitOps = useGitOperations({
@@ -1803,169 +1784,78 @@ export default function ProjectSessionDetailPage({
                             </div>
                           </div>
 
-                          {/* Remote Configuration */}
-                          {!currentRemote ? (
-                            <div className="border border-blue-200 bg-blue-50 rounded-md px-3 py-2 flex items-center justify-between dark:border-blue-800 dark:bg-blue-950/50">
-                              <span className="text-sm text-blue-800 dark:text-blue-300">
-                                Set up Git remote for version control
-                              </span>
-                              <Button
-                                onClick={() => setRemoteDialogOpen(true)}
-                                size="sm"
-                                variant="outline"
-                              >
-                                <GitBranch className="mr-2 h-3 w-3" />
-                                Configure
-                              </Button>
-                            </div>
-                          ) : (
-                            <div className="border rounded-md px-2 py-1.5">
-                              <div className="flex items-center gap-2 text-xs">
-                                <div className="flex items-center gap-1.5 text-muted-foreground">
-                                  <Cloud className="h-3 w-3" />
-                                  <span className="truncate max-w-[200px]">
-                                    {currentRemote?.url
+                          {/* Simplified Git Status Display */}
+                          <div className="space-y-2">
+                            {/* GitHub Not Configured Warning */}
+                            {!githubConfigured && (
+                              <Alert variant="default" className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/50">
+                                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-500" />
+                                <AlertTitle className="text-amber-900 dark:text-amber-100">GitHub Not Configured</AlertTitle>
+                                <AlertDescription className="text-amber-800 dark:text-amber-200">
+                                  Configure GitHub integration in{" "}
+                                  <a 
+                                    href={`/projects/${projectName}?section=settings`}
+                                    className="underline font-medium hover:text-amber-900 dark:hover:text-amber-100"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    workspace settings
+                                  </a>
+                                  {" "}to enable git operations.
+                                </AlertDescription>
+                              </Alert>
+                            )}
+
+                            {/* State 1: No Git Initialized */}
+                            {!gitOps.gitStatus?.initialized ? (
+                              <div className="text-sm text-muted-foreground py-2">
+                                <p>No git repository. Ask the agent to initialize git if needed.</p>
+                              </div>
+                            ) : !gitOps.gitStatus?.hasRemote ? (
+                              /* State 2: Has Git, No Remote */
+                              <div className="space-y-2">
+                                <div className="border rounded-md px-2 py-1.5 text-xs">
+                                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                                    <GitBranch className="h-3 w-3" />
+                                    <span>{gitOps.gitStatus?.branch || "main"}</span>
+                                    <span className="text-muted-foreground/50">(local only)</span>
+                                  </div>
+                                </div>
+                                <Button
+                                  onClick={() => setRemoteDialogOpen(true)}
+                                  size="sm"
+                                  variant="outline"
+                                  className="w-full"
+                                  disabled={!githubConfigured}
+                                >
+                                  <Cloud className="mr-2 h-3 w-3" />
+                                  Configure Remote
+                                </Button>
+                              </div>
+                            ) : (
+                              /* State 3: Has Git + Remote */
+                              <div className="border rounded-md px-2 py-1.5 space-y-1">
+                                {/* Remote Repository */}
+                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                  <Cloud className="h-3 w-3 flex-shrink-0" />
+                                  <span className="truncate">
+                                    {gitOps.gitStatus?.remoteUrl
                                       ?.split("/")
                                       .slice(-2)
                                       .join("/")
                                       .replace(".git", "") || ""}
-                                    /{currentRemote?.branch || "main"}
                                   </span>
                                 </div>
-
-                                <div className="flex-1" />
-
-                                {mergeStatus && !mergeStatus.canMergeClean ? (
-                                  <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
-                                    <X className="h-3 w-3" />
-                                    <span className="font-medium">
-                                      conflict
-                                    </span>
-                                  </div>
-                                ) : gitOps.gitStatus?.hasChanges ||
-                                  mergeStatus?.remoteCommitsAhead ? (
-                                  <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
-                                    {mergeStatus?.remoteCommitsAhead ? (
-                                      <span>
-                                        ↓{mergeStatus.remoteCommitsAhead}
-                                      </span>
-                                    ) : null}
-                                    {gitOps.gitStatus?.hasChanges ? (
-                                      <span className="font-normal">
-                                        {gitOps.gitStatus?.uncommittedFiles ??
-                                          0}{" "}
-                                        uncommitted
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                ) : null}
-
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() =>
-                                          gitOps.handleGitSynchronize(
-                                            refetchMergeStatus,
-                                          )
-                                        }
-                                        disabled={
-                                          !mergeStatus?.canMergeClean ||
-                                          gitOps.synchronizing ||
-                                          gitOps.gitStatus?.hasChanges
-                                        }
-                                        className="h-6 w-6 p-0"
-                                      >
-                                        {gitOps.synchronizing ? (
-                                          <Loader2 className="h-3 w-3 animate-spin" />
-                                        ) : (
-                                          <RefreshCw className="h-3 w-3" />
-                                        )}
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>
-                                        {gitOps.gitStatus?.hasChanges
-                                          ? "Commit changes first"
-                                          : `Sync with origin/${currentRemote?.branch || "main"}`}
-                                      </p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-6 w-6 p-0"
-                                    >
-                                      <MoreVertical className="h-3 w-3" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem
-                                      onClick={() => setRemoteDialogOpen(true)}
-                                    >
-                                      <Edit className="mr-2 h-3 w-3" />
-                                      Manage Remote
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      onClick={() => setCommitModalOpen(true)}
-                                      disabled={!gitOps.gitStatus?.hasChanges}
-                                    >
-                                      <Edit className="mr-2 h-3 w-3" />
-                                      Commit Changes
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() =>
-                                        gitOps.handleGitPull(refetchMergeStatus)
-                                      }
-                                      disabled={
-                                        !mergeStatus?.canMergeClean ||
-                                        gitOps.isPulling
-                                      }
-                                    >
-                                      <CloudDownload className="mr-2 h-3 w-3" />
-                                      Pull
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() =>
-                                        gitOps.handleGitPush(refetchMergeStatus)
-                                      }
-                                      disabled={
-                                        !mergeStatus?.canMergeClean ||
-                                        gitOps.isPushing ||
-                                        gitOps.gitStatus?.hasChanges
-                                      }
-                                    >
-                                      <CloudUpload className="mr-2 h-3 w-3" />
-                                      Push
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        const newRemotes = {
-                                          ...directoryRemotes,
-                                        };
-                                        delete newRemotes[
-                                          selectedDirectory.path
-                                        ];
-                                        setDirectoryRemotes(newRemotes);
-                                        successToast("Git remote disconnected");
-                                      }}
-                                    >
-                                      <X className="mr-2 h-3 w-3 text-red-600 dark:text-red-400" />
-                                      Disconnect
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
+                                
+                                {/* Branch Tracking - only show arrow if different */}
+                                <div className="flex items-center gap-1.5 text-xs">
+                                  <GitBranch className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                  <span className="text-muted-foreground">
+                                    {gitOps.gitStatus?.branch || "main"}
+                                  </span>
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
                       </AccordionContent>
                     </AccordionItem>
@@ -2072,36 +1962,18 @@ export default function ProjectSessionDetailPage({
         open={remoteDialogOpen}
         onOpenChange={setRemoteDialogOpen}
         onSave={async (url, branch) => {
-          const success = await gitOps.configureRemote(url, branch);
+          const success = await gitOps.configureRemote(url, branch || "main");
           if (success) {
             const newRemotes = { ...directoryRemotes };
-            newRemotes[selectedDirectory.path] = { url, branch };
+            newRemotes[selectedDirectory.path] = { url, branch: branch || "main" };
             setDirectoryRemotes(newRemotes);
             setRemoteDialogOpen(false);
-            refetchMergeStatus();
           }
         }}
         directoryName={selectedDirectory.name}
         currentUrl={currentRemote?.url}
         currentBranch={currentRemote?.branch}
-        remoteBranches={remoteBranches}
-        mergeStatus={mergeStatus}
         isLoading={gitOps.isConfiguringRemote}
-      />
-
-      <CommitChangesDialog
-        open={commitModalOpen}
-        onOpenChange={setCommitModalOpen}
-        onCommit={async (message) => {
-          const success = await gitOps.handleCommit(message);
-          if (success) {
-            setCommitModalOpen(false);
-            refetchMergeStatus();
-          }
-        }}
-        gitStatus={gitOps.gitStatus ?? null}
-        directoryName={selectedDirectory.name}
-        isCommitting={gitOps.committing}
       />
     </>
   );

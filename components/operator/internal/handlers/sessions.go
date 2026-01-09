@@ -851,6 +851,17 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						{Name: "CONTENT_SERVICE_MODE", Value: "true"},
 						{Name: "STATE_BASE_DIR", Value: "/workspace"},
 					},
+					// Import integration secrets as environment variables (GITHUB_TOKEN, GITLAB_TOKEN, etc.)
+					EnvFrom: func() []corev1.EnvFromSource {
+						if integrationSecretsExist {
+							return []corev1.EnvFromSource{{
+								SecretRef: &corev1.SecretEnvSource{
+									LocalObjectReference: corev1.LocalObjectReference{Name: integrationSecretsName},
+								},
+							}}
+						}
+						return nil
+					}(),
 					Ports: []corev1.ContainerPort{{ContainerPort: 8080, Name: "http"}},
 					ReadinessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
