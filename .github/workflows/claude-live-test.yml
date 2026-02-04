@@ -173,14 +173,14 @@ jobs:
 
         IMPORTANT: You have browser automation tools from Playwright MCP
 
-        FIRST ACTION: Run browser_navigate to http://localhost
+        FIRST ACTION: Run mcp__playwright__browser_navigate to http://localhost
 
         Then:
-        - Run browser_snapshot to see the page
-        - Use browser_click to interact with UI
+        - Run mcp__playwright__browser_snapshot to see the page
+        - Use mcp__playwright__browser_click to interact with UI
         - Create workspace: e2e-claude-test-${{ github.event.pull_request.number }}
         - Test the features
-        - Take screenshots with browser_take_screenshot
+        - Take screenshots with mcp__playwright__browser_take_screenshot
         - Write summary to /tmp/test_output/test_report.md
 
         Focus on testing the race condition fix for rapid project deletions.
@@ -209,7 +209,7 @@ jobs:
           --mcp-config /tmp/mcp/playwright-config.json
           --max-turns 30
           --model claude-sonnet-4-5-20250929
-          --allowedTools "browser_*,Read,Write,List"
+          --allowedTools "mcp__playwright__*,Read,Write,List"
           --disallowedTools "Bash,WebFetch"
           --debug
 
