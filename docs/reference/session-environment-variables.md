@@ -2,7 +2,7 @@
 
 This document is the authoritative reference for all environment variables injected into session pods by the Ambient Code Platform. A session pod contains four containers — **init-hydrate**, **ambient-content**, **ambient-code-runner**, and **state-sync** — each receiving a subset of these variables.
 
-For development-focused documentation on the runner, see the [Claude Code Runner README](../../components/runners/claude-code-runner/README.md). For file-based configuration (CLAUDE.md, rules, skills, workflows), see the [session-config-reference](https://github.com/ambient-code/session-config-reference) repository.
+For development-focused documentation on the runner, see the [Claude Code Runner README](../../components/runners/claude-code-runner/README.md).
 
 ---
 
@@ -19,7 +19,7 @@ Variables that identify the session within the cluster.
 | `SESSION_NAME` | Yes | — | Operator | Session name passed to init-hydrate and state-sync for S3 paths |
 | `NAMESPACE` | Yes | — | Operator | Namespace passed to init-hydrate and state-sync for S3 paths |
 | `IS_RESUME` | No | _(unset)_ | Operator | Set to `true` when the session has a prior `status.startTime`; tells the runner to skip `INITIAL_PROMPT` and use `continue_conversation` |
-| `PARENT_SESSION_ID` | No | _(unset)_ | CR spec | Set when this session is a continuation of a previous session |
+| `PARENT_SESSION_ID` | No | _(unset)_ | Annotation | Set when this session continues a previous one; read from annotation `vteam.ambient-code/parent-session-id`, with fallback to `spec.environmentVariables` |
 
 ---
 
@@ -29,12 +29,12 @@ Controls how the Claude model is invoked.
 
 | Variable | Required | Default | Source | Description |
 |----------|----------|---------|--------|-------------|
-| `INITIAL_PROMPT` | Yes | — | CR spec | The task prompt sent to Claude on first run |
-| `LLM_MODEL` | Yes | — | CR spec | Claude model identifier (e.g., `claude-sonnet-4-5`, `claude-opus-4-6`) |
-| `LLM_TEMPERATURE` | No | `0.00` | CR spec | Sampling temperature (formatted as `%.2f`) |
-| `LLM_MAX_TOKENS` | No | `0` | CR spec | Maximum output tokens per turn |
-| `TIMEOUT` | Yes | `3600` | CR spec | Session timeout in seconds |
-| `INITIAL_PROMPT_DELAY_SECONDS` | No | `1` | Hardcoded | Delay before sending initial prompt in non-interactive mode (runner-side) |
+| `INITIAL_PROMPT` | Yes | — | CR spec | The task prompt sent to Claude on first run (from `spec.initialPrompt`) |
+| `LLM_MODEL` | Yes | — | CR spec | Claude model identifier from `spec.llmSettings.model` (e.g., `claude-sonnet-4-5`, `claude-opus-4-6`) |
+| `LLM_TEMPERATURE` | No | `0.00` | CR spec | Sampling temperature from `spec.llmSettings.temperature` (formatted as `%.2f`) |
+| `LLM_MAX_TOKENS` | No | `0` | CR spec | Maximum output tokens from `spec.llmSettings.maxTokens` |
+| `TIMEOUT` | Yes | — | CR spec | Session timeout in seconds; typically set via `ProjectSettings.defaultTimeout` |
+| `INITIAL_PROMPT_DELAY_SECONDS` | No | `1` | Runner default | Delay before sending initial prompt in non-interactive mode; not injected by operator |
 
 ---
 
@@ -113,7 +113,7 @@ Variables for runner-to-backend communication.
 
 | Variable | Required | Default | Source | Description |
 |----------|----------|---------|--------|-------------|
-| `BACKEND_API_URL` | Yes | — | Operator | Full URL to the backend API (e.g., `http://backend-service.ambient-code.svc.cluster.local:8080/api`) |
+| `BACKEND_API_URL` | Yes | — | Operator | Full URL to the backend API; templated as `http://backend-service.{backendNamespace}.svc.cluster.local:8080/api` |
 | `USER_ID` | No | _(unset)_ | CR spec | User identifier from `spec.userContext.userId`; used in Langfuse traces and audit logs |
 | `USER_NAME` | No | _(unset)_ | CR spec | Display name from `spec.userContext.displayName`; used in logs |
 
@@ -127,7 +127,7 @@ Configuration for the AG-UI protocol server running inside the runner container.
 |----------|----------|---------|--------|-------------|
 | `USE_AGUI` | Yes | `true` | Hardcoded | Enables AG-UI server mode (always `true` for current architecture) |
 | `AGUI_PORT` | Yes | `8001` | Hardcoded | Port the AG-UI FastAPI server listens on; must match the container port and Service definition |
-| `AGUI_HOST` | No | `0.0.0.0` | Hardcoded | Bind address for the AG-UI server |
+| `AGUI_HOST` | No | `0.0.0.0` | Runner default | Bind address for the AG-UI server; not injected by operator |
 
 ---
 
@@ -135,7 +135,7 @@ Configuration for the AG-UI protocol server running inside the runner container.
 
 Platform-wide LLM observability configuration. All keys are sourced from the `ambient-admin-langfuse-secret` Secret and are optional — missing keys will not prevent pod startup.
 
-For setup and deployment details, see [Observability & Langfuse](../observability-langfuse.md).
+For setup and deployment details, see [Observability & Langfuse](../observability/observability-langfuse.md).
 
 | Variable | Required | Default | Source | Description |
 |----------|----------|---------|--------|-------------|
@@ -143,8 +143,8 @@ For setup and deployment details, see [Observability & Langfuse](../observabilit
 | `LANGFUSE_PUBLIC_KEY` | No | _(unset)_ | Secret (`ambient-admin-langfuse-secret`) | Langfuse project public key |
 | `LANGFUSE_SECRET_KEY` | No | _(unset)_ | Secret (`ambient-admin-langfuse-secret`) | Langfuse project secret key |
 | `LANGFUSE_HOST` | No | _(unset)_ | Secret (`ambient-admin-langfuse-secret`) | Langfuse server URL (e.g., `http://langfuse-web.langfuse.svc.cluster.local:3000`) |
-| `LANGFUSE_MASK_MESSAGES` | No | `true` | Hardcoded | When `true` (default), redacts user prompts and assistant responses in traces; set to `false` only in dev/testing |
-| `LANGFUSE_FLUSH_TIMEOUT` | No | `30.0` | Hardcoded | Timeout in seconds for flushing Langfuse events at session end |
+| `LANGFUSE_MASK_MESSAGES` | No | `true` | Runner default | When `true` (default), redacts user prompts and assistant responses in traces; set to `false` only in dev/testing |
+| `LANGFUSE_FLUSH_TIMEOUT` | No | `30.0` | Runner default | Timeout in seconds for flushing Langfuse events at session end |
 
 !!! warning
     Setting `LANGFUSE_MASK_MESSAGES=false` exposes full user message content in Langfuse. Only use this in development or testing environments.
@@ -198,7 +198,7 @@ General runtime configuration for the runner container.
 | Variable | Required | Default | Source | Description |
 |----------|----------|---------|--------|-------------|
 | `DEBUG` | No | `true` | Hardcoded | Enables debug-level logging in the runner |
-| `INTERACTIVE` | Yes | — | CR spec | `true` for interactive chat sessions, `false` for batch mode |
+| `INTERACTIVE` | Yes | `false` | CR spec | `true` for interactive chat sessions, `false` for batch mode |
 | `WORKSPACE_PATH` | Yes | `/workspace` | Hardcoded | Root directory for cloned repositories and artifacts |
 | `ARTIFACTS_DIR` | No | `artifacts` | Hardcoded | Subdirectory under workspace for session artifacts |
 | `CONTENT_SERVICE_MODE` | Yes | `true` | Hardcoded | Enables content service mode in the ambient-content container |
@@ -234,8 +234,8 @@ spec:
     DEBUG: "false"  # Overrides the default "true"
 ```
 
-!!! warning
-    Custom variables can override security-sensitive defaults like `BOT_TOKEN` or `BACKEND_API_URL`. Use with caution in production environments.
+!!! note
+    Variables injected via `secretKeyRef` (like `BOT_TOKEN` and `LANGFUSE_*`) cannot be overridden this way — Kubernetes gives `ValueFrom` precedence over `Value`. Only plain-value variables (like `DEBUG`, `BACKEND_API_URL`, `LLM_MODEL`) can be overridden.
 
 ---
 
@@ -258,6 +258,10 @@ Kubernetes Secrets that provide environment variables to session pods.
 ## Container Cross-Reference
 
 Shows which containers receive each variable. Containers: **I** = init-hydrate, **C** = ambient-content, **R** = runner, **S** = state-sync.
+
+### Operator-Injected Variables
+
+These are set by the operator when constructing the pod spec.
 
 | Variable | I | C | R | S | Notes |
 |----------|---|---|---|---|-------|
@@ -313,6 +317,23 @@ Shows which containers receive each variable. Containers: **I** = init-hydrate, 
 | `ARTIFACTS_DIR` | | | x | | |
 | `CONTENT_SERVICE_MODE` | | x | | | |
 | `STATE_BASE_DIR` | | x | | | |
+
+### Runner-Default and Runtime-Derived Variables
+
+These are **not injected by the operator**. They are read from the environment by the runner with built-in defaults, or set at runtime by the runner itself. They can be overridden via `spec.environmentVariables`.
+
+| Variable | Container | Notes |
+|----------|-----------|-------|
+| `AGUI_HOST` | R | Default: `0.0.0.0` |
+| `INITIAL_PROMPT_DELAY_SECONDS` | R | Default: `1` |
+| `LANGFUSE_MASK_MESSAGES` | R | Default: `true` |
+| `LANGFUSE_FLUSH_TIMEOUT` | R | Default: `30.0` |
+| `JIRA_URL` | R | Set by `auth.py` from backend API |
+| `JIRA_API_TOKEN` | R | Set by `auth.py` from backend API |
+| `JIRA_EMAIL` | R | Set by `auth.py` from backend API |
+| `GIT_USER_NAME` | R | Set by `auth.py` from GitHub/GitLab credentials |
+| `GIT_USER_EMAIL` | R | Set by `auth.py` from GitHub/GitLab credentials |
+| `USER_GOOGLE_EMAIL` | R | Set by `auth.py` from Google OAuth credentials |
 
 ---
 
