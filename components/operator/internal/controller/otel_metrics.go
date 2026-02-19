@@ -388,21 +388,35 @@ func countSessionsByPhase(ctx context.Context, phases ...string) map[string]int6
 	return counts
 }
 
+// metricsEnabled returns true when instruments have been initialised.
+// All Record* functions check this to avoid nil-pointer panics when
+// OTEL_EXPORTER_OTLP_ENDPOINT is unset.
+func metricsEnabled() bool { return meter != nil }
+
 // Record functions for metrics
 
 // === Duration metrics (histograms) ===
 
 func RecordSessionStartupDuration(namespace string, duration float64) {
+	if !metricsEnabled() {
+		return
+	}
 	sessionStartupDuration.Record(context.Background(), duration,
 		metric.WithAttributes(attribute.String("namespace", namespace)))
 }
 
 func RecordSessionTotalDuration(namespace string, duration float64) {
+	if !metricsEnabled() {
+		return
+	}
 	sessionTotalDuration.Record(context.Background(), duration,
 		metric.WithAttributes(attribute.String("namespace", namespace)))
 }
 
 func RecordReconcileDuration(phase string, duration float64, success bool) {
+	if !metricsEnabled() {
+		return
+	}
 	successStr := "true"
 	if !success {
 		successStr = "false"
@@ -415,11 +429,17 @@ func RecordReconcileDuration(phase string, duration float64, success bool) {
 }
 
 func RecordTokenProvisionDuration(namespace string, duration float64) {
+	if !metricsEnabled() {
+		return
+	}
 	tokenProvisionDuration.Record(context.Background(), duration,
 		metric.WithAttributes(attribute.String("namespace", namespace)))
 }
 
 func RecordImagePullDuration(namespace, image string, duration float64) {
+	if !metricsEnabled() {
+		return
+	}
 	imagePullDuration.Record(context.Background(), duration,
 		metric.WithAttributes(
 			attribute.String("namespace", namespace),
@@ -430,6 +450,9 @@ func RecordImagePullDuration(namespace, image string, duration float64) {
 // === Lifecycle counters ===
 
 func RecordPhaseTransition(namespace, fromPhase, toPhase string) {
+	if !metricsEnabled() {
+		return
+	}
 	sessionPhaseTransitions.Add(context.Background(), 1,
 		metric.WithAttributes(
 			attribute.String("namespace", namespace),
@@ -439,6 +462,9 @@ func RecordPhaseTransition(namespace, fromPhase, toPhase string) {
 }
 
 func RecordSessionCompleted(namespace, finalPhase string) {
+	if !metricsEnabled() {
+		return
+	}
 	sessionsCompleted.Add(context.Background(), 1,
 		metric.WithAttributes(
 			attribute.String("namespace", namespace),
@@ -447,6 +473,9 @@ func RecordSessionCompleted(namespace, finalPhase string) {
 }
 
 func RecordSessionCreatedByUser(namespace, user string) {
+	if !metricsEnabled() {
+		return
+	}
 	sessionsByUser.Add(context.Background(), 1,
 		metric.WithAttributes(
 			attribute.String("namespace", namespace),
@@ -455,6 +484,9 @@ func RecordSessionCreatedByUser(namespace, user string) {
 }
 
 func RecordSessionCreatedByProject(namespace string) {
+	if !metricsEnabled() {
+		return
+	}
 	sessionsByProject.Add(context.Background(), 1,
 		metric.WithAttributes(attribute.String("namespace", namespace)))
 }
@@ -462,6 +494,9 @@ func RecordSessionCreatedByProject(namespace string) {
 // === Error counters ===
 
 func RecordReconcileRetry(namespace, phase string) {
+	if !metricsEnabled() {
+		return
+	}
 	reconcileRetries.Add(context.Background(), 1,
 		metric.WithAttributes(
 			attribute.String("namespace", namespace),
@@ -470,11 +505,17 @@ func RecordReconcileRetry(namespace, phase string) {
 }
 
 func RecordSessionTimeout(namespace string) {
+	if !metricsEnabled() {
+		return
+	}
 	sessionTimeouts.Add(context.Background(), 1,
 		metric.WithAttributes(attribute.String("namespace", namespace)))
 }
 
 func RecordS3Error(namespace, operation string) {
+	if !metricsEnabled() {
+		return
+	}
 	s3Errors.Add(context.Background(), 1,
 		metric.WithAttributes(
 			attribute.String("namespace", namespace),
@@ -483,11 +524,17 @@ func RecordS3Error(namespace, operation string) {
 }
 
 func RecordTokenRefreshError(namespace string) {
+	if !metricsEnabled() {
+		return
+	}
 	tokenRefreshErrors.Add(context.Background(), 1,
 		metric.WithAttributes(attribute.String("namespace", namespace)))
 }
 
 func RecordPodRestart(namespace, session string) {
+	if !metricsEnabled() {
+		return
+	}
 	podRestarts.Add(context.Background(), 1,
 		metric.WithAttributes(
 			attribute.String("namespace", namespace),
